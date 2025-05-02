@@ -1,0 +1,59 @@
+name: update and optimize China IP list for multiple waf
+
+on:
+  push:
+    branches: [ "main" ]
+
+  workflow_dispatch:
+
+  schedule: 
+    - cron:  '0 3 */3 * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout the repository
+      uses: actions/checkout@v4
+
+    - name: Setup environment
+      run: |
+        mkdir -p tmp
+        mkdir -p tmp/safeline-community
+
+    - name: Download CN IP List
+      run: |
+        curl -o tmp/CN-ip-list.txt https://raw.githubusercontent.com/Hackl0us/GeoIP2-CN/release/CN-ip-cidr.txt
+
+    - name: Split the IP list for safeline-community
+      run: |
+        CURRENT_DIR=$(pwd)
+        cd tmp
+        split -l 1000 -d -a 2 CN-ip-list.txt CN-ip-cidr- && ls | grep CN-ip-cidr | xargs -n1 -I {} mv {} safeline-community/{}.txt
+        cd $CURRENT_DIR
+
+    - name: Configure git for pushing
+      run: |
+        git config --local user.email "88478301+Coinsinical@users.noreply.github.com"
+        git config --local user.name "github-action[bot]"
+
+        git fetch
+        git checkout release
+
+        git checkout --orphan release-orphan
+        git rm -rf .
+
+        cp tmp/* ./ -r
+        git add safeline-community/
+        git commit -am "Updated at $(date +'%Y-%m-%d')"
+
+        git branch -D release
+        git branch -m release
+
+    - name: GitHub Push
+      uses: ad-m/github-push-action@v0.8.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: release
+        force: true
